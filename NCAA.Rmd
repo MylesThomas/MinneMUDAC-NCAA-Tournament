@@ -1,0 +1,17 @@
+---
+title: "NCAA"
+author: "Myles Thomas"
+date: "3/8/2021"
+output: word_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## MinneMUDAC - Spring Student Data Science Challenge
+
+```{r}
+
+```
+

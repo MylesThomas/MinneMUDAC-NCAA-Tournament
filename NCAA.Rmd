@@ -12,6 +12,77 @@ knitr::opts_chunk$set(echo = TRUE)
 ## MinneMUDAC - Spring Student Data Science Challenge
 
 ```{r}
+# load libraries
+# install.packages("mlr", dependencies = T)
+library(tidyverse)
+library(caret)
+```
 
+```{r}
+# load in data
+df <- read.csv("Big_Dance_CSV.csv")
+head(df)
+```
+
+
+```{r}
+# mutate in:
+# margin of victory
+# response variable = win/loss
+# new predictor = seed difference
+df <- df %>% mutate(MarginOfVictory = Score - Score.1)
+df <- df %>% mutate(SeedDifference = Seed.1 - Seed)
+df <- df %>% mutate(Win = ifelse(MarginOfVictory >= 1, 1, 0))
+head(df)
+```
+
+
+
+```{r}
+# set up algorithm
+model <- glm(Win ~ SeedDifference + Round, data = df, family = binomial)
+
+summary(model)
+
+model$coefficients
+```
+
+```{r}
+# interpret
+exp(model$coefficients[2])
+
+print("For every 1 unit increase in difference of seed, probability of winning the game increases by 20%")
+
+
+
+exp(model$coefficients[3])
+
+print("For every 1 unit increase in round, probability of winning the game increases by about 8%")
+
+
+
+
+```
+
+```{r}
+# text example since no bracket to make predictions on yet
+# example of a round 1 matchup of 16 vs 1 seed
+new.df <- data.frame(SeedDifference = 15, Round = 1)
+
+predict(model, newdata = new.df, type = "response")
+
+print("There is a 93% chance the 1 seed wins the game according the model")
+```
+
+```{r}
+print("This can also be seen by plugging in the values into the logistic Regression Model...")
+
+# log odds of y = 1 (win)
+log.odds <- model$coefficients[1] + model$coefficients[2] * 15 + model$coefficients[3] * 1
+odds <- exp(log.odds)
+
+# probability = odds / (1 + odds)
+probability <- odds / (1 + odds)
+probability
 ```
 

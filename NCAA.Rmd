@@ -20,7 +20,8 @@ library(caret)
 
 ```{r}
 # load in data
-df <- read.csv("Big_Dance_CSV.csv")
+full.df <- read.csv("Big_Dance_CSV.csv")
+df <- full.df
 head(df)
 ```
 
@@ -85,4 +86,180 @@ odds <- exp(log.odds)
 probability <- odds / (1 + odds)
 probability
 ```
+
+Now to see how this logistic model performs on the training data.
+
+```{r}
+lr_probs <- predict(model, df, type = "response")
+lr_preds <- ifelse(lr_probs >= .50, 1, 0)
+
+library(caret)
+
+cm <- confusionMatrix(as.factor(lr_preds), 
+                as.factor(df$Win),
+                positive = "1")
+
+cm
+```
+
+
+
+
+
+Setting up a Super Vector Machine (SVM) with hyperparameter tuning
+
+
+```{r}
+#full.df
+
+SVMdf <- full.df[, c(2,5,6,9,10)]
+
+SVMdf <- SVMdf %>% mutate(Winner = ifelse(Score - Score.1 > 0, 1, 0))
+
+# turn it into a factor
+SVMdf$Winner <- SVMdf$Winner %>% as.factor()
+```
+
+```{r}
+library(mlr)
+library(tidyverse)
+dfTib <- SVMdf %>% as_tibble()
+dfTib <- select(dfTib, -c("Score", "Score.1"))
+dfTib
+```
+
+```{r}
+Task <- makeClassifTask(data = dfTib, target = "Winner")
+svm <- makeLearner("classif.svm")
+```
+
+
+```{r}
+# Defining the hyperparameter space for tuning
+kernels <- c("polynomial") # this is definitely not radial OR sigmoid
+
+svmParamSpace <- makeParamSet(
+makeDiscreteParam("kernel", values = kernels),
+makeIntegerParam("degree", lower = 1, upper = 1),
+makeNumericParam("cost", lower = 0.1, upper = 10),
+makeNumericParam("gamma", lower = 0.1, 10))
+```
+
+
+```{r}
+# Defining the random search
+# (Might go back and do grid search w/ k-fold cross validation)
+
+randSearch <- makeTuneControlRandom(maxit = 300)
+
+# gridSearch <- 
+# randSearch <- makeTuneControlGrid()
+
+
+cvForTuning <- makeResampleDesc("Holdout", split = 2/3)
+
+# kFold <- 
+# cvForTuning <- makeResampleDesc(method = "RepCV", folds = 10, reps = 50, stratify = TRUE)
+
+```
+
+```{r}
+# this is to see how many cores your computer has
+# the more cores, the faster the algorithm works
+parallel::detectCores()
+```
+
+
+```{r}
+# Performing hyperparameter tuning
+library(parallelMap)
+library(parallel)
+
+parallelStartSocket(cpus = detectCores())
+
+tunedSvmPars <- tuneParams("classif.svm", task = Task,
+                           resampling = cvForTuning,
+                           par.set = svmParamSpace,
+                           control = randSearch)
+parallelStop()
+```
+
+
+```{r}
+tunedSvmPars
+```
+c=6.55;g=4.9 = .2816
+
+0.259 is best currently (might be .269, looks like there was a typo because the mmce was better below )
+
+
+```{r}
+# Training the model with the tuned hyperparameters
+tunedSvm <- setHyperPars(makeLearner("classif.svm"),
+                         par.vals = tunedSvmPars$x)
+
+tunedSvmModel <- train(tunedSvm, Task)
+```
+
+
+```{r}
+# Cross-validating the ENTIRE model-building process
+outer <- makeResampleDesc("CV", iters = 3)
+svmWrapper <- makeTuneWrapper("classif.svm", resampling = cvForTuning,
+par.set = svmParamSpace,
+control = randSearch)
+
+parallelStartSocket(cpus = detectCores())
+
+cvWithTuning <- resample(svmWrapper, Task, resampling = outer)
+
+parallelStop()
+
+```
+
+
+.2866 is best currently
+
+
+
+```{r}
+# Extracting the cross-validation result
+cvWithTuning$aggr
+```
+
+It appears there is 29% error rate. Time to make predictions on the training data since we do not yet have the bracket
+
+```{r}
+# make predictions
+
+# put in model, then the task
+preds <- predict(tunedSvmModel, Task)
+
+cm2 <- calculateConfusionMatrix(preds)
+
+cm2$result
+
+
+```
+
+
+
+```{r}
+dfTib$Winner %>% table()
+
+1 - (1505/(1505+700))
+
+
+
+```
+
+```{r}
+0.3174603 - cvWithTuning$aggr
+```
+
+
+
+Our model is over 3% better than simply choosing every favorite
+
+
 
